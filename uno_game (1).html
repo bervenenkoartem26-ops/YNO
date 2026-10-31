@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="ru" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>UNO Mobile</title>
+    
+    <!-- PWA Primary Meta Tags -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#090d16">
+    <meta name="description" content="Игра УНО на одном устройстве">
+
+    <!-- Web App Manifest (Data URI for single file deployment) -->
+    <link rel="manifest" href="data:application/manifest+json;utf8,%7B%22name%22%3A%22UNO%20Mobile%22%2C%22short_name%22%3A%22UNO%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23090d16%22%2C%22theme_color%22%3A%22%23090d16%22%2C%22orientation%22%3A%22portrait%22%7D">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,600;0,800;0,900;1,900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Montserrat', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            background: #090d16;
+            color: #f8fafc;
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        }
+
+        /* Card Visual Mechanics */
+        .uno-card {
+            aspect-ratio: 2/3;
+            border-radius: 14px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+            position: relative;
+            transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, filter 0.2s ease;
+            cursor: pointer;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 4px solid white;
+            will-change: transform;
+        }
+
+        .uno-card.playable {
+            animation: float-pulse 2s infinite ease-in-out;
+        }
+
+        .uno-card.playable:active {
+            transform: scale(0.92) translateY(4px) !important;
+        }
+
+        .uno-card.disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            filter: grayscale(60%) brightness(0.8);
+        }
+
+        /* Card Colors */
+        .bg-uno-red { background: linear-gradient(135deg, #ff4757 0%, #c0392b 100%); }
+        .bg-uno-yellow { background: linear-gradient(135deg, #ffa502 0%, #d35400 100%); }
+        .bg-uno-green { background: linear-gradient(135deg, #2ed573 0%, #10ac84 100%); }
+        .bg-uno-blue { background: linear-gradient(135deg, #1e90ff 0%, #2980b9 100%); }
+        .bg-uno-wild { background: #1e293b; }
+
+        .card-oval {
+            width: 82%;
+            height: 72%;
+            background: white;
+            border-radius: 50%;
+            transform: rotate(-28deg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.25);
+        }
+
+        .bg-uno-wild .card-oval {
+            background: conic-gradient(#ff4757 0 90deg, #1e90ff 90deg 180deg, #2ed573 180deg 270deg, #ffa502 270deg 360deg);
+        }
+
+        .card-value {
+            font-size: 2.4rem;
+            font-weight: 900;
+            transform: rotate(28deg);
+            text-shadow: 2px 3px 0 rgba(0,0,0,0.2);
+            line-height: 1;
+        }
+
+        .text-uno-red { color: #ff4757; }
+        .text-uno-yellow { color: #d35400; }
+        .text-uno-green { color: #10ac84; }
+        .text-uno-blue { color: #1e90ff; }
+        .text-uno-wild { color: #ffffff; text-shadow: 0 0 8px rgba(0,0,0,0.9); }
+
+        .card-corner {
+            position: absolute;
+            font-size: 0.8rem;
+            font-weight: 900;
+            color: white;
+            line-height: 1;
+        }
+        .corner-tl { top: 6px; left: 7px; }
+        .corner-br { bottom: 6px; right: 7px; transform: rotate(180deg); }
+
+        /* Animations */
+        @keyframes float-pulse {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-6px); }
+        }
+
+        @keyframes cardPlayAnim {
+            0% { transform: scale(0.6) translateY(100px) rotate(-15deg); opacity: 0; }
+            100% { transform: scale(1) translateY(0) rotate(0deg); opacity: 1; }
+        }
+
+        .anim-play {
+            animation: cardPlayAnim 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        @keyframes actionFlash {
+            0% { transform: scale(0.5); opacity: 0; }
+            50% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(1); opacity: 0; }
+        }
+
+        .action-overlay-anim {
+            animation: actionFlash 0.9s ease-out forwards;
+        }
+
+        /* Card Back Visual (Hidden Deck style) */
+        .card-back {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border: 3px solid #334155;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        .card-back::after {
+            content: 'UNO';
+            font-weight: 900;
+            font-style: italic;
+            color: #ef4444;
+            font-size: 1.1rem;
+            transform: rotate(-25deg);
+            text-shadow: 0 0 6px rgba(239,68,68,0.6);
+        }
+
+        /* Custom Scrollbar for Cards */
+        .hand-scroll::-webkit-scrollbar { height: 0px; }
+    </style>
+</head>
+<body class="h-full w-full overflow-hidden flex flex-col justify-between bg-slate-950">
+
+    <!-- ==================== SETUP SCREEN ==================== -->
+    <div id="setup-screen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-md">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 max-w-sm w-full shadow-2xl text-center space-y-6">
+            <div>
+                <h1 class="text-5xl font-black italic tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-amber-400 to-emerald-400 drop-shadow-lg">UNO</h1>
+                <p class="text-xs text-slate-400 font-semibold tracking-wide uppercase mt-1">Pass & Play Mobile Edition</p>
+            </div>
+
+            <div class="space-y-4">
+                <label class="block text-left text-xs font-bold uppercase tracking-wider text-slate-400">Количество игроков</label>
+                <div class="grid grid-cols-3 gap-2">
+                    <button type="button" onclick="setPlayerCount(2)" id="btn-count-2" class="count-btn py-3 rounded-2xl font-black text-sm border-2 border-amber-400 bg-amber-400/20 text-amber-300">2</button>
+                    <button type="button" onclick="setPlayerCount(3)" id="btn-count-3" class="count-btn py-3 rounded-2xl font-black text-sm border-2 border-slate-800 bg-slate-800 text-slate-400">3</button>
+                    <button type="button" onclick="setPlayerCount(4)" id="btn-count-4" class="count-btn py-3 rounded-2xl font-black text-sm border-2 border-slate-800 bg-slate-800 text-slate-400">4</button>
+                </div>
+
+                <div id="player-inputs" class="space-y-2 pt-2"></div>
+            </div>
+
+            <div class="space-y-2">
+                <button onclick="startGame()" class="w-full py-4 bg-gradient-to-r from-red-500 via-amber-500 to-emerald-500 text-slate-950 font-black text-lg rounded-2xl shadow-lg active:scale-95 transition">
+                    НАЧАТЬ ИГРУ
+                </button>
+                <button onclick="openRules()" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition">
+                    📖 Правила игры
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== PASS DEVICE SCREEN ==================== -->
+    <div id="pass-screen" class="fixed inset-0 z-40 flex flex-col items-center justify-center p-6 bg-slate-950 text-center space-y-6 hidden">
+        <div class="relative">
+            <div class="w-28 h-28 rounded-full bg-slate-900 border-4 border-amber-400 flex items-center justify-center text-5xl shadow-2xl animate-bounce">
+                📱
+            </div>
+            <div class="absolute -bottom-2 -right-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full uppercase">Секретно</div>
+        </div>
+        
+        <div class="space-y-2">
+            <p class="text-sm text-slate-400 font-semibold uppercase tracking-wider">Передайте устройство</p>
+            <h3 id="next-player-name" class="text-3xl font-black text-amber-400">Игрок 1</h3>
+        </div>
+
+        <p class="text-xs text-slate-500 max-w-xs">Убедитесь, что соперники не смотрят на экран!</p>
+
+        <button onclick="revealHand()" class="w-full max-w-xs py-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xl rounded-2xl shadow-xl active:scale-95 transition">
+            Я ГОТОВ
+        </button>
+    </div>
+
+    <!-- ==================== WILD COLOR PICKER MODAL ==================== -->
+    <div id="color-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-xs w-full text-center space-y-4 shadow-2xl">
+            <h3 class="text-lg font-black text-white">Выберите цвет:</h3>
+            <div class="grid grid-cols-2 gap-3">
+                <button onclick="selectColor('red')" class="h-20 rounded-2xl bg-uno-red text-white font-black text-base shadow-lg active:scale-95 transition flex items-center justify-center">Красный</button>
+                <button onclick="selectColor('yellow')" class="h-20 rounded-2xl bg-uno-yellow text-white font-black text-base shadow-lg active:scale-95 transition flex items-center justify-center">Желтый</button>
+                <button onclick="selectColor('green')" class="h-20 rounded-2xl bg-uno-green text-white font-black text-base shadow-lg active:scale-95 transition flex items-center justify-center">Зеленый</button>
+                <button onclick="selectColor('blue')" class="h-20 rounded-2xl bg-uno-blue text-white font-black text-base shadow-lg active:scale-95 transition flex items-center justify-center">Синий</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== RULES MODAL ==================== -->
+    <div id="rules-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full max-h-[80vh] flex flex-col justify-between text-left space-y-4 shadow-2xl">
+            <h3 class="text-xl font-black text-amber-400 text-center">Правила UNO</h3>
+            
+            <div class="overflow-y-auto space-y-3 text-xs text-slate-300 pr-1 leading-relaxed">
+                <p><b class="text-white">Цель игры:</b> Первым скинуть все карты с руки.</p>
+                <p><b class="text-white">Ход игры:</b> В свой ход положите карту, совпадающую с верхней картой сброса по <span class="text-red-400">Цвету</span>, <span class="text-amber-400">Цифре</span> или <span class="text-emerald-400">Символу</span>.</p>
+                <hr class="border-slate-800">
+                <p><b class="text-white">Особые карты:</b></p>
+                <ul class="list-disc pl-4 space-y-1">
+                    <li><b>🚫 Пропуск хода:</b> Следующий игрок пропускает ход.</li>
+                    <li><b>🔄 Реверс:</b> Меняет направление хода.</li>
+                    <li><b>+2 Cards:</b> Следующий игрок берет 2 карты и пропускает ход.</li>
+                    <li><b>★ Wild:</b> Позволяет выбрать любой цвет.</li>
+                    <li><b>+4 Wild:</b> Выбирает цвет, следующий берет 4 карты и пропускает ход.</li>
+                </ul>
+                <hr class="border-slate-800">
+                <p><b class="text-amber-400">Правило UNO:</b> Когда у вас остается всего 1 карта, вы ДОЛЖНЫ нажать кнопку <b>UNO!</b> до выкладывания карты. Если вы забудете — получите штраф +2 карты!</p>
+            </div>
+
+            <button onclick="closeRules()" class="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition">
+                Понятно
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== WINNER MODAL ==================== -->
+    <div id="win-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 hidden">
+        <div class="bg-slate-900 border-2 border-amber-400 rounded-3xl p-8 max-w-sm w-full text-center space-y-6 shadow-2xl">
+            <div class="text-6xl animate-bounce">🏆</div>
+            <div class="space-y-1">
+                <p class="text-xs text-slate-400 font-bold uppercase tracking-wider">Победитель раунда</p>
+                <h3 id="winner-name" class="text-3xl font-black text-amber-400">Игрок 1</h3>
+            </div>
+            <button onclick="restartGame()" class="w-full py-4 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-lg rounded-2xl shadow-xl active:scale-95 transition">
+                В меню
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== SPECIAL ACTION OVERLAY ANIMATION ==================== -->
+    <div id="action-overlay" class="fixed inset-0 z-30 pointer-events-none flex items-center justify-center hidden">
+        <div id="action-text" class="text-5xl md:text-7xl font-black italic text-amber-400 drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)] action-overlay-anim">
+            +2
+        </div>
+    </div>
+
+    <!-- ==================== HEADER ==================== -->
+    <header class="bg-slate-950/90 border-b border-slate-900 px-4 py-3 flex items-center justify-between z-10 shrink-0">
+        <div class="flex items-center space-x-2">
+            <span class="text-2xl font-black italic text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-amber-400">UNO</span>
+            <button onclick="openRules()" class="text-xs bg-slate-900 border border-slate-800 px-2 py-1 rounded-lg text-slate-400 font-bold">Rules</button>
+        </div>
+
+        <div class="flex items-center space-x-3">
+            <div id="direction-indicator" class="w-7 h-7 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-amber-400 font-bold text-xs">
+                ↻
+            </div>
+            <div class="text-right">
+                <p class="text-[10px] text-slate-500 font-bold uppercase">Ход игрока</p>
+                <p id="current-player-display" class="font-extrabold text-amber-400 text-xs md:text-sm">Игрок 1</p>
+            </div>
+        </div>
+    </header>
+
+    <!-- ==================== MAIN PLAYFIELD ==================== -->
+    <main class="flex-1 flex flex-col items-center justify-between p-4 relative overflow-hidden">
+        
+        <!-- Opponents Visual Deck Bar (HIDDEN EXACT CARD COUNT) -->
+        <div id="opponents-bar" class="w-full max-w-sm flex justify-around items-center pt-1">
+            <!-- Hidden Opponents rendered dynamically (No Card Count shown) -->
+        </div>
+
+        <!-- Center Cards Arena -->
+        <div class="flex items-center justify-center gap-6 my-auto z-10">
+            <!-- Draw Deck Stack -->
+            <div class="flex flex-col items-center space-y-1">
+                <div onclick="handleDrawCardClick()" class="uno-card w-20 md:w-28 card-back flex items-center justify-center active:scale-95 transition">
+                </div>
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Колода</span>
+            </div>
+
+            <!-- Discard Pile -->
+            <div class="flex flex-col items-center space-y-1">
+                <div id="discard-pile" class="relative">
+                    <!-- Top card rendered dynamically -->
+                </div>
+                <div class="flex items-center space-x-1">
+                    <span class="text-[10px] text-slate-500 font-bold uppercase">Цвет:</span>
+                    <span id="active-color-name" class="text-[10px] font-black uppercase px-2 py-0.5 rounded text-white bg-slate-800">Красный</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast Notification Message -->
+        <div id="game-toast" class="absolute bottom-2 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-slate-900/90 border border-slate-800 text-amber-300 font-bold text-xs shadow-2xl transition-all duration-300 opacity-0 pointer-events-none z-20 whitespace-nowrap">
+            Сообщение
+        </div>
+    </main>
+
+    <!-- ==================== BOTTOM CONTROL FOOTER ==================== -->
+    <footer class="bg-slate-950 border-t border-slate-900 p-3 flex flex-col space-y-2 z-10 shrink-0">
+        <div class="flex items-center justify-between px-1">
+            <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Ваши карты</span>
+
+            <div class="flex items-center space-x-2">
+                <button id="uno-btn" onclick="handleUnoClick()" class="px-4 py-1.5 bg-red-600 text-white font-black text-xs rounded-xl shadow-lg transition active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed">
+                    UNO!
+                </button>
+                <button id="pass-turn-btn" onclick="handlePassTurnClick()" class="px-4 py-1.5 bg-slate-800 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 shadow transition hidden">
+                    Пасс
+                </button>
+            </div>
+        </div>
+
+        <!-- Scrollable Hand -->
+        <div id="player-hand" class="hand-scroll flex items-center space-x-2 overflow-x-auto py-2 px-1 min-h-[130px] md:min-h-[160px]">
+            <!-- Cards rendered dynamically -->
+        </div>
+    </footer>
+
+    <!-- ==================== GAME ENGINE SCRIPT ==================== -->
+    <script>
+        // Game State Variables
+        let playerCount = 2;
+        let players = [];
+        let currentTurn = 0;
+        let direction = 1;
+        let deck = [];
+        let discardPile = [];
+        let activeColor = '';
+        let hasDrawnThisTurn = false;
+
+        const COLORS = ['red', 'yellow', 'green', 'blue'];
+        const COLOR_NAMES = { red: 'Красный', yellow: 'Желтый', green: 'Зеленый', blue: 'Синий' };
+        const COLOR_CLASSES = { red: 'bg-red-600', yellow: 'bg-amber-500', green: 'bg-emerald-600', blue: 'bg-blue-600' };
+
+        // Setup Player Count Buttons
+        function setPlayerCount(count) {
+            playerCount = count;
+            for (let i = 2; i <= 4; i++) {
+                const btn = document.getElementById(`btn-count-${i}`);
+                if (i === count) {
+                    btn.className = 'count-btn py-3 rounded-2xl font-black text-sm border-2 border-amber-400 bg-amber-400/20 text-amber-300';
+                } else {
+                    btn.className = 'count-btn py-3 rounded-2xl font-black text-sm border-2 border-slate-800 bg-slate-800 text-slate-400';
+                }
+            }
+            renderPlayerInputs();
+        }
+
+        function renderPlayerInputs() {
+            const container = document.getElementById('player-inputs');
+            container.innerHTML = '';
+            for (let i = 0; i < playerCount; i++) {
+                const div = document.createElement('div');
+                div.className = 'flex items-center space-x-2';
+                div.innerHTML = `
+                    <input type="text" id="input-player-${i}" value="Игрок ${i+1}" maxlength="10" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 text-center font-bold" />
+                `;
+                container.appendChild(div);
+            }
+        }
+        renderPlayerInputs();
+
+        // Standard 108 UNO Cards Deck Construction
+        function createDeck() {
+            const newDeck = [];
+            let idCounter = 1;
+
+            COLORS.forEach(color => {
+                newDeck.push({ id: idCounter++, color, type: 'number', value: 0 });
+                for (let num = 1; num <= 9; num++) {
+                    newDeck.push({ id: idCounter++, color, type: 'number', value: num });
+                    newDeck.push({ id: idCounter++, color, type: 'number', value: num });
+                }
+                ['skip', 'reverse', '+2'].forEach(action => {
+                    newDeck.push({ id: idCounter++, color, type: action, value: action });
+                    newDeck.push({ id: idCounter++, color, type: action, value: action });
+                });
+            });
+
+            for (let i = 0; i < 4; i++) {
+                newDeck.push({ id: idCounter++, color: 'wild', type: 'wild', value: 'wild' });
+                newDeck.push({ id: idCounter++, color: 'wild', type: '+4', value: '+4' });
+            }
+
+            return shuffle(newDeck);
+        }
+
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        // Start Game
+        function startGame() {
+            players = [];
+            for (let i = 0; i < playerCount; i++) {
+                const nameInput = document.getElementById(`input-player-${i}`);
+                const name = nameInput.value.trim() || `Игрок ${i+1}`;
+                players.push({ id: i, name, hand: [], calledUno: false });
+            }
+
+            deck = createDeck();
+            discardPile = [];
+            currentTurn = 0;
+            direction = 1;
+            hasDrawnThisTurn = false;
+
+            // Deal 7 cards to each player
+            for (let c = 0; c < 7; c++) {
+                players.forEach(player => {
+                    player.hand.push(deck.pop());
+                });
+            }
+
+            let topCard = deck.pop();
+            while (topCard.type === '+4') {
+                deck.unshift(topCard);
+                topCard = deck.pop();
+            }
+            discardPile.push(topCard);
+            activeColor = topCard.color === 'wild' ? COLORS[Math.floor(Math.random() * COLORS.length)] : topCard.color;
+
+            document.getElementById('setup-screen').classList.add('hidden');
+            triggerPassDevice(currentTurn);
+        }
+
+        // Pass Device Masking
+        function triggerPassDevice(nextTurnIndex) {
+            currentTurn = nextTurnIndex;
+            hasDrawnThisTurn = false;
+            document.getElementById('next-player-name').innerText = players[currentTurn].name;
+            document.getElementById('pass-screen').classList.remove('hidden');
+        }
+
+        function revealHand() {
+            document.getElementById('pass-screen').classList.add('hidden');
+            updateUI();
+        }
+
+        // Move Validation Rules
+        function isValidMove(card) {
+            const topCard = discardPile[discardPile.length - 1];
+            if (card.color === 'wild') return true;
+            if (card.color === activeColor) return true;
+            if (card.type === 'number' && topCard.type === 'number' && card.value === topCard.value) return true;
+            if (card.type !== 'number' && card.type === topCard.type) return true;
+            return false;
+        }
+
+        // Card Playing Flow
+        function playCard(handIndex) {
+            const currentPlayer = players[currentTurn];
+            const card = currentPlayer.hand[handIndex];
+
+            if (!isValidMove(card)) {
+                showToast('❌ Карта не подходит!');
+                return;
+            }
+
+            // Penalty for not calling UNO! with 2 cards in hand before play
+            if (currentPlayer.hand.length === 2 && !currentPlayer.calledUno) {
+                showToast('⚠️ Вы забыли нажать UNO! +2 карты');
+                drawCardsForPlayer(currentTurn, 2);
+            }
+
+            currentPlayer.hand.splice(handIndex, 1);
+            discardPile.push(card);
+
+            if (card.color === 'wild') {
+                document.getElementById('color-modal').classList.remove('hidden');
+                return;
+            }
+
+            activeColor = card.color;
+            processCardAction(card);
+        }
+
+        function selectColor(color) {
+            activeColor = color;
+            document.getElementById('color-modal').classList.add('hidden');
+            const topCard = discardPile[discardPile.length - 1];
+            processCardAction(topCard);
+        }
+
+        function processCardAction(card) {
+            const currentPlayer = players[currentTurn];
+
+            if (currentPlayer.hand.length === 0) {
+                showWinner(currentPlayer.name);
+                return;
+            }
+
+            let skipTurn = false;
+
+            if (card.type === 'skip') {
+                triggerActionAnim('🚫 SKIP');
+                skipTurn = true;
+            } else if (card.type === 'reverse') {
+                if (players.length === 2) {
+                    triggerActionAnim('🔄 SKIP');
+                    skipTurn = true;
+                } else {
+                    direction *= -1;
+                    triggerActionAnim('🔄 REVERSE');
+                }
+            } else if (card.type === '+2') {
+                const nextP = getNextPlayerIndex();
+                triggerActionAnim('+2 CARDS');
+                drawCardsForPlayer(nextP, 2);
+                skipTurn = true;
+            } else if (card.type === '+4') {
+                const nextP = getNextPlayerIndex();
+                triggerActionAnim('+4 WILD');
+                drawCardsForPlayer(nextP, 4);
+                skipTurn = true;
+            }
+
+            advanceTurn(skipTurn ? 2 : 1);
+        }
+
+        function triggerActionAnim(text) {
+            const overlay = document.getElementById('action-overlay');
+            const txt = document.getElementById('action-text');
+            txt.innerText = text;
+            overlay.classList.remove('hidden');
+            setTimeout(() => {
+                overlay.classList.add('hidden');
+            }, 900);
+        }
+
+        function advanceTurn(steps = 1) {
+            let nextIndex = (currentTurn + (direction * steps)) % players.length;
+            if (nextIndex < 0) nextIndex += players.length;
+            players[currentTurn].calledUno = false;
+            triggerPassDevice(nextIndex);
+        }
+
+        function getNextPlayerIndex() {
+            let idx = (currentTurn + direction) % players.length;
+            if (idx < 0) idx += players.length;
+            return idx;
+        }
+
+        function drawCardsForPlayer(playerIdx, count) {
+            for (let i = 0; i < count; i++) {
+                if (deck.length === 0) replenishDeck();
+                if (deck.length > 0) {
+                    players[playerIdx].hand.push(deck.pop());
+                }
+            }
+        }
+
+        function handleDrawCardClick() {
+            if (hasDrawnThisTurn) {
+                showToast('Вы уже взяли карту! Нажмите Пасс.');
+                return;
+            }
+
+            const currentPlayer = players[currentTurn];
+            drawCardsForPlayer(currentTurn, 1);
+            hasDrawnThisTurn = true;
+
+            const drawnCard = currentPlayer.hand[currentPlayer.hand.length - 1];
+
+            if (isValidMove(drawnCard)) {
+                showToast('Карта подходит! Сыграйте ее или нажмите Пасс.');
+            } else {
+                showToast('Карта не подходит. Ход переходит дальше.');
+                setTimeout(() => advanceTurn(1), 1000);
+            }
+            updateUI();
+        }
+
+        function handlePassTurnClick() {
+            if (!hasDrawnThisTurn) return;
+            advanceTurn(1);
+        }
+
+        function replenishDeck() {
+            if (discardPile.length <= 1) return;
+            const top = discardPile.pop();
+            deck = shuffle(discardPile);
+            discardPile = [top];
+            showToast('Колода перетасована');
+        }
+
+        function handleUnoClick() {
+            const currentPlayer = players[currentTurn];
+            if (currentPlayer.hand.length === 2) {
+                currentPlayer.calledUno = true;
+                showToast(`🔥 ${currentPlayer.name} кричит UNO!`);
+                updateUI();
+            } else {
+                showToast('UNO! нажимается когда остается 2 карты!');
+            }
+        }
+
+        function showWinner(name) {
+            document.getElementById('winner-name').innerText = name;
+            document.getElementById('win-modal').classList.remove('hidden');
+        }
+
+        function restartGame() {
+            document.getElementById('win-modal').classList.add('hidden');
+            document.getElementById('setup-screen').classList.remove('hidden');
+        }
+
+        function openRules() { document.getElementById('rules-modal').classList.remove('hidden'); }
+        function closeRules() { document.getElementById('rules-modal').classList.add('hidden'); }
+
+        let toastTimeout;
+        function showToast(msg) {
+            const toast = document.getElementById('game-toast');
+            toast.innerText = msg;
+            toast.classList.remove('opacity-0');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => toast.classList.add('opacity-0'), 2200);
+        }
+
+        // UI Renderer (Hides opponent card count completely)
+        function updateUI() {
+            const currentPlayer = players[currentTurn];
+
+            document.getElementById('current-player-display').innerText = currentPlayer.name;
+            const dirInd = document.getElementById('direction-indicator');
+            dirInd.innerText = direction === 1 ? '↻' : '↺';
+
+            const activeColorSpan = document.getElementById('active-color-name');
+            activeColorSpan.innerText = COLOR_NAMES[activeColor] || activeColor;
+            activeColorSpan.className = `text-[10px] font-black uppercase px-2 py-0.5 rounded text-white ${COLOR_CLASSES[activeColor] || 'bg-slate-800'}`;
+
+            // Render Opponents as anonymous hidden card stacks (NO COUNTER)
+            const oppBar = document.getElementById('opponents-bar');
+            oppBar.innerHTML = '';
+            players.forEach((p, idx) => {
+                if (idx !== currentTurn) {
+                    const div = document.createElement('div');
+                    div.className = 'flex flex-col items-center bg-slate-900/80 border border-slate-800 px-3 py-1.5 rounded-2xl text-center min-w-[75px]';
+                    div.innerHTML = `
+                        <span class="text-[11px] font-bold text-slate-300 truncate max-w-[70px]">${p.name}</span>
+                        <div class="flex space-x-0.5 mt-1">
+                            <div class="w-3 h-4 bg-slate-800 border border-slate-600 rounded-sm"></div>
+                            <div class="w-3 h-4 bg-slate-800 border border-slate-600 rounded-sm -ml-1"></div>
+                        </div>
+                    `;
+                    oppBar.appendChild(div);
+                }
+            });
+
+            // Discard Pile Top Card
+            const topCard = discardPile[discardPile.length - 1];
+            document.getElementById('discard-pile').innerHTML = renderCardHTML(topCard, false);
+
+            // Render Current Player Hand
+            const handContainer = document.getElementById('player-hand');
+            handContainer.innerHTML = '';
+
+            currentPlayer.hand.forEach((card, index) => {
+                const playable = isValidMove(card);
+                const cardEl = document.createElement('div');
+                cardEl.className = 'flex-shrink-0 anim-play';
+                cardEl.innerHTML = renderCardHTML(card, true, playable);
+                cardEl.onclick = () => playCard(index);
+                handContainer.appendChild(cardEl);
+            });
+
+            // Controls state
+            const unoBtn = document.getElementById('uno-btn');
+            unoBtn.disabled = currentPlayer.hand.length !== 2;
+
+            const passBtn = document.getElementById('pass-turn-btn');
+            if (hasDrawnThisTurn) passBtn.classList.remove('hidden');
+            else passBtn.classList.add('hidden');
+        }
+
+        function renderCardHTML(card, isInteractive = false, isPlayable = true) {
+            let bgClass = `bg-uno-${card.color}`;
+            let textClass = `text-uno-${card.color}`;
+            let displayVal = card.value;
+            let cornerVal = card.value;
+
+            if (card.type === 'skip') { displayVal = '⊘'; cornerVal = '⊘'; }
+            else if (card.type === 'reverse') { displayVal = '⇄'; cornerVal = '⇄'; }
+            else if (card.type === '+2') { displayVal = '+2'; cornerVal = '+2'; }
+            else if (card.type === 'wild') { displayVal = '★'; cornerVal = 'W'; textClass = 'text-uno-wild'; }
+            else if (card.type === '+4') { displayVal = '+4'; cornerVal = '+4'; textClass = 'text-uno-wild'; }
+
+            const interactiveClass = isInteractive ? (isPlayable ? 'playable' : 'disabled') : '';
+            const cardSizeClass = isInteractive ? 'w-20 md:w-24' : 'w-20 md:w-28';
+
+            return `
+                <div class="uno-card ${cardSizeClass} ${bgClass} ${interactiveClass}">
+                    <div class="card-corner corner-tl">${cornerVal}</div>
+                    <div class="card-oval">
+                        <span class="card-value ${textClass}">${displayVal}</span>
+                    </div>
+                    <div class="card-corner corner-br">${cornerVal}</div>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
